@@ -4,12 +4,10 @@ from logic_utils import get_range_for_difficulty, parse_guess, check_guess, upda
 
 
 st.set_page_config(page_title="Glitchy Guesser", page_icon="🎮")
-
 st.title("🎮 Game Glitch Investigator")
 st.caption("An AI-generated guessing game. Something is off.")
 
 st.sidebar.header("Settings")
-
 difficulty = st.sidebar.selectbox(
     "Difficulty",
     ["Easy", "Normal", "Hard"],
@@ -28,11 +26,14 @@ low, high = get_range_for_difficulty(difficulty)
 st.sidebar.caption(f"Range: {low} to {high}")
 st.sidebar.caption(f"Attempts allowed: {attempt_limit}")
 
+if "prev_difficulty" not in st.session_state:
+    st.session_state.prev_difficulty = difficulty
+
 if "secret" not in st.session_state:
     st.session_state.secret = random.randint(low, high)
 
 if "attempts" not in st.session_state:
-    st.session_state.attempts = 1
+    st.session_state.attempts = 0
 
 if "score" not in st.session_state:
     st.session_state.score = 0
@@ -70,9 +71,11 @@ with col2:
 with col3:
     show_hint = st.checkbox("Show hint", value=True)
 
-if new_game:
+if new_game or st.session_state.prev_difficulty != difficulty:
+    st.session_state.status = "playing"
+    st.session_state.prev_difficulty = difficulty
     st.session_state.attempts = 0
-    st.session_state.secret = random.randint(1, 100)
+    st.session_state.secret = random.randint(low, high)
     st.success("New game started.")
     st.rerun()
 
