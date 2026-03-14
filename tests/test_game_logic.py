@@ -18,6 +18,11 @@ def test_guess_too_low():
     assert outcome == "Too Low"
     assert msg == "📈 Go HIGHER!"
 
+def test_guess_insanely_low():
+    outcome, msg = check_guess(-100000000000000000, 50)
+    assert outcome == "Too Low"
+    assert msg == "📈 Go HIGHER!"
+
 
 # --- get_range_for_difficulty ---
 
@@ -40,6 +45,22 @@ def test_parse_valid_int():
 def test_parse_float_string():
     ok, val, err = parse_guess("3.7")
     assert ok and val == 3 and err is None
+
+def test_parse_0():
+    ok, val, err = parse_guess("0")
+    assert ok and val == 0 and err is None
+
+def test_parse_negative_0():
+    ok, val, err = parse_guess("-0")
+    assert ok and val == 0 and err is None
+
+def test_parse_big_int():
+    ok, val, err = parse_guess("234132513513453145424335446544456423334")
+    assert ok and val == 234132513513453145424335446544456423334 and err is None
+
+def test_parse_negative_big_int():
+    ok, val, err = parse_guess("-234132513513453145424335446544456423334")
+    assert ok and val == -234132513513453145424335446544456423334 and err is None
 
 def test_parse_empty():
     ok, val, err = parse_guess("")
