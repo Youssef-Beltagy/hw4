@@ -46,18 +46,6 @@ if "history" not in st.session_state:
 
 st.subheader("Make a guess")
 
-st.info(
-    f"Guess a number between 1 and 100. "
-    f"Attempts left: {attempt_limit - st.session_state.attempts}"
-)
-
-with st.expander("Developer Debug Info"):
-    st.write("Secret:", st.session_state.secret)
-    st.write("Attempts:", st.session_state.attempts)
-    st.write("Score:", st.session_state.score)
-    st.write("Difficulty:", difficulty)
-    st.write("History:", st.session_state.history)
-
 raw_guess = st.text_input(
     "Enter your guess:",
     key=f"guess_input_{difficulty}"
@@ -93,14 +81,32 @@ if submit:
 
     if not ok:
         st.session_state.history.append(raw_guess)
-        st.error(err)
     else:
         st.session_state.history.append(guess_int)
 
+# Render the attempts remaining and the history after their state values are updated
+st.info(
+    f"Guess a number between 1 and 100. "
+    f"Attempts left: {attempt_limit - st.session_state.attempts}"
+)
+
+with st.expander("Developer Debug Info"):
+    st.write("Secret:", st.session_state.secret)
+    st.write("Used Attempts:", st.session_state.attempts)
+    st.write("Score:", st.session_state.score)
+    st.write("Difficulty:", difficulty)
+    st.write("History:", st.session_state.history)
+
+if submit:
+    if not ok:
+        st.error(err)
+    else:
         outcome, message = check_guess(guess_int, st.session_state.secret)
 
-        if show_hint:
-            st.warning(message)
+        if not show_hint:
+            message = message if "Correct" in message else "❌ Wrong!"
+        
+        st.warning(message) # Always show whether the answer is right or wrong
 
         st.session_state.score = update_score(
             current_score=st.session_state.score,
