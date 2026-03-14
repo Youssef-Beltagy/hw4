@@ -25,14 +25,24 @@ It wrote the code, ran away, and now the game is unplayable.
 
 ## 📝 Document Your Experience
 
-- [ ] Describe the game's purpose.
-- [ ] Detail which bugs you found.
-- [ ] Explain what fixes you applied.
+This is a number guessing game where the player guesses a secret number within a limited number of attempts, with difficulty settings that control the range and attempt limit, and a cumulative score based on how quickly the player guessed correctly.
+
+There were some bugs in the game that I documented in `reflection.md` and fixed.
 
 ## 📸 Demo
 
-- [ ] [Insert a screenshot of your fixed, winning game here]
+![](pics/demo.png)
 
 ## 🚀 Stretch Features
 
-- [ ] [If you choose to complete Challenge 4, insert a screenshot of your Enhanced Game UI here]
+1. Added edge case tests
+2. Added game history in the sidebar
+   1. AI implemented almost all of the code. I reviewed, tested, and may have fixed it.
+   2. I don't like how the implementation uses hardcoded strings all over the place... but... meh
+3. Fixed obscure UI lag bug where attempt history and number of attempts were inaccurate
+4. Fixed all bugs
+5. Even if hints are disabled, the game tells the player if their answer was wrong
+
+Edge case tests pass:
+![](pics/tests_pass.png)
+
