@@ -26,6 +26,15 @@ low, high = get_range_for_difficulty(difficulty)
 st.sidebar.caption(f"Range: {low} to {high}")
 st.sidebar.caption(f"Attempts allowed: {attempt_limit}")
 
+st.sidebar.divider()
+st.sidebar.subheader("Game History")
+if "game_history" in st.session_state:
+    for i, g in enumerate(st.session_state.game_history, 1):
+        icon = "✅" if g["result"] == "Won" else "❌"
+        st.sidebar.text(f"{icon} Game {i}: {g['result']} ({g['difficulty']}, {g['attempts']} tries, score: {g['score']})")
+else:
+    st.sidebar.caption("No games completed yet.")
+
 if "prev_difficulty" not in st.session_state:
     st.session_state.prev_difficulty = difficulty
 
@@ -43,6 +52,9 @@ if "status" not in st.session_state:
 
 if "history" not in st.session_state:
     st.session_state.history = []
+
+if "game_history" not in st.session_state:
+    st.session_state.game_history = []
 
 st.subheader("Make a guess")
 
@@ -117,6 +129,9 @@ if submit:
         if outcome == "Win":
             st.balloons()
             st.session_state.status = "won"
+            st.session_state.game_history.append(
+                {"result": "Won", "difficulty": difficulty, "attempts": st.session_state.attempts, "score": st.session_state.score}
+            )
             st.success(
                 f"You won! The secret was {st.session_state.secret}. "
                 f"Final score: {st.session_state.score}"
@@ -124,6 +139,9 @@ if submit:
         else:
             if st.session_state.attempts >= attempt_limit:
                 st.session_state.status = "lost"
+                st.session_state.game_history.append(
+                    {"result": "Lost", "difficulty": difficulty, "attempts": st.session_state.attempts, "score": st.session_state.score}
+                )
                 st.error(
                     f"Out of attempts! "
                     f"The secret was {st.session_state.secret}. "
