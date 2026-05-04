@@ -46,6 +46,21 @@ class ClassifyResult:
     source: str = "unknown"  # "gemini", "fallback", or "error"
 
 
+@dataclass
+class DirectAnswer:
+    """
+    Outcome of asking Gemini to answer a question directly about the secret.
+
+    Used as a fallback for questions that don't map to the structured schema.
+    Unlike the classifier path, this call DOES put the secret country into the
+    LLM's context, so it trades the anti-leak guarantee for broader coverage.
+    """
+
+    answer: bool | None  # True/False for yes/no; None means "unknown / can't tell"
+    source: str = "llm_direct"
+    raw: str | None = None  # raw model output (for debugging/logging only)
+
+
 # ---------------------------------------------------------------------------
 # Prompt + schema
 # ---------------------------------------------------------------------------
@@ -290,3 +305,110 @@ def classify_question(
         return result
 
     return _classify_with_fallback(question)
+
+
+# ---------------------------------------------------------------------------
+# LLM-direct answering (out-of-schema fallback)
+# ---------------------------------------------------------------------------
+
+# Schema forces the answer into one of three exact strings. Gemini's structured
+# output subset supports `enum` on string fields, which is what we rely on to
+# keep the guardrail tight.
+DIRECT_ANSWER_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "answer": {"type": "string", "enum": ["yes", "no", "unknown"]},
+    },
+    "required": ["answer"],
+}
+
+_DIRECT_ANSWER_MAP = {"yes": True, "no": False, "unknown": None}
+
+
+def _build_direct_answer_prompt(country: dict) -> str:
+    """System prompt for the direct-answer call. Keeps the model on-task."""
+    return (
+        "You are the oracle in a 20-questions style country-guessing game. "
+        f"The secret country is {country['name']} (ISO code {country['cca3']}). "
+        "The player will ask a yes/no question about this country. Reply with a "
+        "JSON object containing exactly one field `answer`, whose value must be "
+        "one of: 'yes', 'no', or 'unknown'.\n\n"
+        "Rules:\n"
+        "1. Base your answer on widely accepted factual knowledge about the country.\n"
+        "2. If you are not confident, answer 'unknown'. Do NOT guess.\n"
+        "3. Do NOT reveal the country's name or any direct identifiers in your answer.\n"
+        "4. Do NOT refuse the question. If it is unanswerable, say 'unknown'.\n"
+        "5. Output only the JSON object. No other text.\n"
+    )
+
+
+def answer_directly(
+    question: str,
+    country: dict,
+    *,
+    model: str = DEFAULT_MODEL,
+    api_key: str | None = None,
+) -> DirectAnswer:
+    """
+    Ask Gemini a yes/no question directly about the secret country.
+
+    Used for questions that don't map to the structured schema. This call puts
+    the secret country in the model's context (unlike classify_question),
+    which is an intentional trade-off: broader coverage in exchange for
+    losing the anti-leak property on this specific path.
+
+    Guardrail: the returned answer is ALWAYS one of True / False / None. Any
+    non-enum output, parse error, network error, or missing API key maps to
+    None ("unknown"). The caller can rely on this and doesn't need to
+    sanity-check the string.
+    """
+    if not question or not question.strip():
+        return DirectAnswer(answer=None, source="llm_direct", raw="empty question")
+
+    key = api_key or os.environ.get(API_KEY_ENV)
+    if not key:
+        return DirectAnswer(answer=None, source="llm_direct", raw="no api key")
+
+    try:
+        from google import genai  # type: ignore
+
+        client = genai.Client(api_key=key)
+        response = client.models.generate_content(
+            model=model,
+            contents=[
+                {"role": "user", "parts": [{"text": f"Player question: {question!r}"}]},
+            ],
+            config={
+                "system_instruction": _build_direct_answer_prompt(country),
+                "response_mime_type": "application/json",
+                "response_json_schema": DIRECT_ANSWER_SCHEMA,
+                "temperature": 0,
+            },
+        )
+    except Exception as exc:
+        logger.warning("answer_directly: Gemini call failed: %s", exc)
+        return DirectAnswer(answer=None, source="llm_direct", raw=f"error: {exc}")
+
+    text = getattr(response, "text", None)
+    if not text:
+        return DirectAnswer(answer=None, source="llm_direct", raw="no text in response")
+
+    # Even though we set an enum in the schema, be paranoid: Gemini occasionally
+    # returns content that parses as JSON but has a surprising shape, or returns
+    # text that doesn't parse at all. Map anything unexpected to "unknown".
+    try:
+        raw = json.loads(text)
+    except ValueError:
+        logger.info("answer_directly: non-JSON response: %r", text[:200])
+        return DirectAnswer(answer=None, source="llm_direct", raw=text)
+
+    value = raw.get("answer") if isinstance(raw, dict) else None
+    if not isinstance(value, str):
+        return DirectAnswer(answer=None, source="llm_direct", raw=text)
+
+    normalized = value.strip().lower()
+    if normalized not in _DIRECT_ANSWER_MAP:
+        logger.info("answer_directly: non-enum value: %r", value)
+        return DirectAnswer(answer=None, source="llm_direct", raw=text)
+
+    return DirectAnswer(answer=_DIRECT_ANSWER_MAP[normalized], source="llm_direct", raw=text)

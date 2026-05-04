@@ -7,11 +7,16 @@ Game loop:
      ("Is it Japan?").
   3. classifier.classify_question() asks Gemini (or falls back to a keyword
      rule-based classifier if no API key) to translate into a structured
-     Query against the field catalog. The LLM never sees the secret.
-  4. country_logic.evaluate() runs the Query deterministically against the
-     secret. A name-equals query is a final guess: correct ends the game,
-     wrong costs a question.
-  5. Game ends on correct guess or when questions run out.
+     Query against the field catalog. The LLM never sees the secret on this
+     path.
+  4. If the question maps, country_logic.evaluate() answers it deterministically
+     from the dataset. A name-equals query is a final guess.
+  5. If the question does NOT map to the schema (e.g. "is their cuisine
+     spicy?"), we fall back to classifier.answer_directly() which asks
+     Gemini to answer yes/no/unknown directly. This path DOES put the secret
+     in the LLM context - broader coverage in exchange for the anti-leak
+     guarantee on that specific question.
+  6. Game ends on correct guess or when questions run out.
 """
 
 from __future__ import annotations
@@ -20,7 +25,7 @@ import random
 
 import streamlit as st
 
-from classifier import ClassifyResult, classify_question
+from classifier import ClassifyResult, answer_directly, classify_question
 from country_logic import (
     DIFFICULTY_LIMITS,
     answer_text,
@@ -190,10 +195,20 @@ if st.session_state[S_STATUS] == STATUS_PLAYING:
         }
 
         if result.query is None:
-            # Out of schema or classifier error — answer "I don't know"
-            # and still charge a question (costs the player to ask unanswerable ones).
-            entry["answer"] = None
-            entry["reason"] = result.reason or "out of schema"
+            # Out-of-schema or classifier error. Try asking Gemini directly.
+            # This path puts the secret in the LLM context (unlike the
+            # classifier path). The guardrail in answer_directly() guarantees
+            # the return value is True / False / None only.
+            direct = answer_directly(question, secret)
+            entry["answer"] = direct.answer
+            entry["source"] = direct.source
+            if direct.answer is None:
+                entry["reason"] = (
+                    result.reason
+                    or "classifier could not map this question; LLM could not answer either"
+                )
+            else:
+                entry["reason"] = "answered directly by the LLM (not grounded in the dataset)"
         elif result.query.field == "name":
             # Final-guess branch: do a fuzzy lookup against the dataset so
             # "South Korea" matches "Republic of Korea", etc.
