@@ -107,6 +107,8 @@ This re-downloads the country list from <https://restcountries.com/> and rewrite
 
 The following are real end-to-end runs against the fallback classifier (no API key required) with Japan as the secret country. With Gemini enabled, the classifier handles a much wider range of phrasings.
 
+![](pics/geo_demo.png)
+
 | Player question | Parsed query | Answer |
 |---|---|---|
 | *"Is it in Asia?"* | `{field: region, op: equals, value: "Asia"}` | ✅ Yes |
